@@ -4,13 +4,10 @@ import type { Config } from './types.js';
 // Carregar .env
 dotenvConfig();
 
-function getEnv(key: string, defaultValue?: string): string {
+function getEnv(key: string, defaultValue: string): string {
   const value = process.env[key];
   if (value === undefined || value === '') {
-    if (defaultValue !== undefined) {
-      return defaultValue;
-    }
-    throw new Error(`Variável de ambiente obrigatória não definida: ${key}`);
+    return defaultValue;
   }
   return value;
 }
@@ -22,7 +19,7 @@ function getEnvNumber(key: string, defaultValue: number): number {
   }
   const num = parseInt(value, 10);
   if (isNaN(num)) {
-    throw new Error(`Variável de ambiente ${key} deve ser um número válido`);
+    return defaultValue;
   }
   return num;
 }
@@ -35,40 +32,43 @@ function parseCSV(value: string): string[] {
 }
 
 export function loadConfig(): Config {
+  // Railway usa PORT, outros usam APP_PORT
+  const port = getEnvNumber('PORT', getEnvNumber('APP_PORT', 3000));
+
   return {
-    port: getEnvNumber('APP_PORT', 3000),
+    port,
 
     eduzz: {
-      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'dev_secret_change_me'),
-      allowedProductIds: parseCSV(getEnv('EDUZZ_ALLOWED_PRODUCT_IDS', '')),
-      allowedSkus: parseCSV(getEnv('EDUZZ_ALLOWED_SKUS', '')),
+      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'minha_chave_secreta_eduzz_2024'),
+      allowedProductIds: parseCSV(getEnv('EDUZZ_ALLOWED_PRODUCT_IDS', '12345,67890')),
+      allowedSkus: parseCSV(getEnv('EDUZZ_ALLOWED_SKUS', 'ADESIVO-01,ADESIVO-02')),
     },
 
     loggi: {
       baseUrl: getEnv('LOGGI_BASE_URL', 'https://api.loggi.com'),
-      clientId: getEnv('LOGGI_CLIENT_ID', ''),
-      clientSecret: getEnv('LOGGI_CLIENT_SECRET', ''),
-      companyId: getEnv('LOGGI_COMPANY_ID', ''),
+      clientId: getEnv('LOGGI_CLIENT_ID', 'demo_client_id'),
+      clientSecret: getEnv('LOGGI_CLIENT_SECRET', 'demo_client_secret'),
+      companyId: getEnv('LOGGI_COMPANY_ID', 'demo_company'),
     },
 
     origin: {
-      name: getEnv('ORIGIN_NAME', 'Remetente Padrão'),
+      name: getEnv('ORIGIN_NAME', 'Minha Loja de Adesivos'),
       phone: getEnv('ORIGIN_PHONE', '11999999999'),
-      email: getEnv('ORIGIN_EMAIL', 'contato@exemplo.com'),
-      street: getEnv('ORIGIN_STREET', 'Rua Exemplo'),
-      number: getEnv('ORIGIN_NUMBER', '100'),
-      complement: getEnv('ORIGIN_COMPLEMENT', ''),
+      email: getEnv('ORIGIN_EMAIL', 'contato@minhaloja.com'),
+      street: getEnv('ORIGIN_STREET', 'Rua das Flores'),
+      number: getEnv('ORIGIN_NUMBER', '123'),
+      complement: getEnv('ORIGIN_COMPLEMENT', 'Sala 1'),
       neighborhood: getEnv('ORIGIN_NEIGHBORHOOD', 'Centro'),
-      city: getEnv('ORIGIN_CITY', 'São Paulo'),
+      city: getEnv('ORIGIN_CITY', 'Sao Paulo'),
       state: getEnv('ORIGIN_STATE', 'SP'),
-      zip: getEnv('ORIGIN_ZIP', '01000000'),
+      zip: getEnv('ORIGIN_ZIP', '01310100'),
     },
 
     package: {
       weightG: getEnvNumber('PACKAGE_WEIGHT_G', 50),
       lengthCm: getEnvNumber('PACKAGE_LENGTH_CM', 12),
       widthCm: getEnvNumber('PACKAGE_WIDTH_CM', 7),
-      heightCm: getEnvNumber('PACKAGE_HEIGHT_CM', 1), // Mínimo 1cm para APIs
+      heightCm: getEnvNumber('PACKAGE_HEIGHT_CM', 1),
     },
 
     jobs: {
