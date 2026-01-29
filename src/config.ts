@@ -73,9 +73,9 @@ export function loadConfig(): Config {
     },
 
     unnichat: {
-      apiUrl: getEnv('UNNICHAT_API_URL', ''),
-      token: getEnv('UNNICHAT_TOKEN', ''),
-      enabled: getEnvBoolean('UNNICHAT_ENABLED', false),
+      apiUrl: getEnv('UNNICHAT_API_URL', 'https://unnichat.com.br/api'),
+      token: getEnv('UNNICHAT_TOKEN', '17051ba0-e8ba-4d2b-a67c-d545971a5296'),
+      enabled: getEnvBoolean('UNNICHAT_ENABLED', true),
     },
 
     origin: {
