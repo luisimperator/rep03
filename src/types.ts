@@ -236,10 +236,16 @@ export interface LoggiWebhookPayload {
 }
 
 // ===========================================
+// Shipping Provider
+// ===========================================
+export type ShippingProvider = 'loggi' | 'melhorenvio';
+
+// ===========================================
 // Configuração
 // ===========================================
 export interface Config {
   port: number;
+  shippingProvider: ShippingProvider;
   eduzz: {
     webhookSecret: string;
     allowedProductIds: string[];

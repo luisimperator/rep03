@@ -43,8 +43,12 @@ export function loadConfig(): Config {
   // Railway usa PORT, outros usam APP_PORT
   const port = getEnvNumber('PORT', getEnvNumber('APP_PORT', 3000));
 
+  // Provider de envio: 'loggi' ou 'melhorenvio'
+  const shippingProvider = getEnv('SHIPPING_PROVIDER', 'loggi') as 'loggi' | 'melhorenvio';
+
   return {
     port,
+    shippingProvider,
 
     eduzz: {
       webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'edzwgp_w8Zxg06nroieQMJzJeYQOi59KCDAcSpuGKXDbraHYJEZfNL0g'),
