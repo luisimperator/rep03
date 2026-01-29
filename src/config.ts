@@ -31,6 +31,14 @@ function parseCSV(value: string): string[] {
   return value.split(',').map(s => s.trim()).filter(s => s.length > 0);
 }
 
+function getEnvBoolean(key: string, defaultValue: boolean): boolean {
+  const value = process.env[key];
+  if (value === undefined || value === '') {
+    return defaultValue;
+  }
+  return value.toLowerCase() === 'true' || value === '1';
+}
+
 export function loadConfig(): Config {
   // Railway usa PORT, outros usam APP_PORT
   const port = getEnvNumber('PORT', getEnvNumber('APP_PORT', 3000));
@@ -39,36 +47,47 @@ export function loadConfig(): Config {
     port,
 
     eduzz: {
-      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'minha_chave_secreta_eduzz_2024'),
-      allowedProductIds: parseCSV(getEnv('EDUZZ_ALLOWED_PRODUCT_IDS', '12345,67890')),
-      allowedSkus: parseCSV(getEnv('EDUZZ_ALLOWED_SKUS', 'ADESIVO-01,ADESIVO-02')),
+      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'chave_secreta_eduzz_canal_anfitriao'),
+      // IDs dos produtos de adesivos do Canal do Anfitrião
+      allowedProductIds: parseCSV(getEnv('EDUZZ_ALLOWED_PRODUCT_IDS',
+        '1461811,1521176,1521233,1521243,1521415,2320335,2320422,2320426,2320427,2897710'
+      )),
+      allowedSkus: parseCSV(getEnv('EDUZZ_ALLOWED_SKUS', '')),
     },
 
-    loggi: {
-      baseUrl: getEnv('LOGGI_BASE_URL', 'https://api.loggi.com'),
-      clientId: getEnv('LOGGI_CLIENT_ID', 'demo_client_id'),
-      clientSecret: getEnv('LOGGI_CLIENT_SECRET', 'demo_client_secret'),
-      companyId: getEnv('LOGGI_COMPANY_ID', 'demo_company'),
+    melhorEnvio: {
+      clientId: getEnv('MELHOR_ENVIO_CLIENT_ID', '22043'),
+      token: getEnv('MELHOR_ENVIO_TOKEN', 'xYaID6vCbDl3i2zFcPl0wGbY1nduj6yN1yRhBe2d'),
+      sandbox: getEnvBoolean('MELHOR_ENVIO_SANDBOX', false),
+    },
+
+    unnichat: {
+      apiUrl: getEnv('UNNICHAT_API_URL', ''),
+      token: getEnv('UNNICHAT_TOKEN', ''),
+      enabled: getEnvBoolean('UNNICHAT_ENABLED', false),
     },
 
     origin: {
-      name: getEnv('ORIGIN_NAME', 'Minha Loja de Adesivos'),
-      phone: getEnv('ORIGIN_PHONE', '11999999999'),
-      email: getEnv('ORIGIN_EMAIL', 'contato@minhaloja.com'),
-      street: getEnv('ORIGIN_STREET', 'Rua das Flores'),
-      number: getEnv('ORIGIN_NUMBER', '123'),
-      complement: getEnv('ORIGIN_COMPLEMENT', 'Sala 1'),
-      neighborhood: getEnv('ORIGIN_NEIGHBORHOOD', 'Centro'),
+      name: getEnv('ORIGIN_NAME', 'Canal do Anfitriao'),
+      phone: getEnv('ORIGIN_PHONE', '11961859863'),
+      email: getEnv('ORIGIN_EMAIL', 'contato@canaldoanfitriao.com.br'),
+      street: getEnv('ORIGIN_STREET', 'Avenida Nacoes Unidas'),
+      number: getEnv('ORIGIN_NUMBER', '14401'),
+      complement: getEnv('ORIGIN_COMPLEMENT', 'Torre Taruma - Cj 2804'),
+      neighborhood: getEnv('ORIGIN_NEIGHBORHOOD', 'Chacara Santo Antonio'),
       city: getEnv('ORIGIN_CITY', 'Sao Paulo'),
       state: getEnv('ORIGIN_STATE', 'SP'),
-      zip: getEnv('ORIGIN_ZIP', '01310100'),
+      zip: getEnv('ORIGIN_ZIP', '04794000'),
+      document: getEnv('ORIGIN_DOCUMENT', ''), // CPF
+      companyDocument: getEnv('ORIGIN_COMPANY_DOCUMENT', ''), // CNPJ
+      stateRegister: getEnv('ORIGIN_STATE_REGISTER', ''), // Inscrição estadual
     },
 
     package: {
-      weightG: getEnvNumber('PACKAGE_WEIGHT_G', 50),
-      lengthCm: getEnvNumber('PACKAGE_LENGTH_CM', 12),
-      widthCm: getEnvNumber('PACKAGE_WIDTH_CM', 7),
-      heightCm: getEnvNumber('PACKAGE_HEIGHT_CM', 1),
+      weightG: getEnvNumber('PACKAGE_WEIGHT_G', 100), // 100g para kit de adesivos
+      lengthCm: getEnvNumber('PACKAGE_LENGTH_CM', 20),
+      widthCm: getEnvNumber('PACKAGE_WIDTH_CM', 15),
+      heightCm: getEnvNumber('PACKAGE_HEIGHT_CM', 2),
     },
 
     jobs: {
