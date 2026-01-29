@@ -1,6 +1,7 @@
 import type { Job } from '../types.js';
 import * as repo from '../db/repo.js';
-import * as loggi from '../services/loggi.js';
+import * as melhorEnvio from '../services/melhorenvio.js';
+import * as unnichat from '../services/unnichat.js';
 import { createOrderLogger } from '../utils/logger.js';
 import {
   JOB_TYPES,
@@ -35,13 +36,14 @@ export async function processJob(job: Job): Promise<void> {
 }
 
 /**
- * Handler: Criar shipment na Loggi
+ * Handler: Criar envio via Melhor Envio
+ * Processo completo: cotação, carrinho, checkout, etiqueta
  */
 async function handleCreateShipment(payload: CreateShipmentPayload): Promise<void> {
   const { invoiceId } = payload;
   const log = createOrderLogger(invoiceId);
 
-  log.info('Processando criação de shipment');
+  log.info('Processando criação de envio via Melhor Envio');
 
   // Buscar pedido
   const order = repo.findOrderByInvoiceId(invoiceId);
@@ -51,7 +53,7 @@ async function handleCreateShipment(payload: CreateShipmentPayload): Promise<voi
 
   // Verificar se já foi criado
   if (order.loggi_shipment_id) {
-    log.warn('Shipment já existe, pulando criação');
+    log.warn('Envio já existe, pulando criação');
     return;
   }
 
@@ -60,39 +62,57 @@ async function handleCreateShipment(payload: CreateShipmentPayload): Promise<voi
   repo.createEvent('shipment_creating', { invoiceId }, order.id, invoiceId);
 
   try {
-    // Criar shipment
-    const response = await loggi.createShipment(order);
+    // Criar envio completo via Melhor Envio (cotação + carrinho + checkout + etiqueta)
+    const result = await melhorEnvio.criarEnvioCompleto(order);
 
-    const shipmentId = response.id || response.shipmentId || '';
-    const trackingCode = response.trackingCode || response.tracking_code || '';
+    log.info({
+      orderId: result.melhorEnvioOrderId,
+      tracking: result.tracking,
+      service: result.serviceName,
+      price: result.price,
+    }, 'Envio criado com sucesso');
 
-    if (!shipmentId) {
-      throw new Error('API Loggi não retornou shipment ID');
-    }
+    // Atualizar pedido com os dados do envio
+    const newStatus = result.labelPath ? 'ETIQUETA_GERADA' : 'AGUARDANDO_LOGGI';
 
-    // Atualizar pedido
-    repo.updateOrderStatus(invoiceId, 'AGUARDANDO_LOGGI', {
-      loggiShipmentId: shipmentId,
-      loggiTrackingCode: trackingCode,
+    repo.updateOrderStatus(invoiceId, newStatus, {
+      loggiShipmentId: result.melhorEnvioOrderId,
+      loggiTrackingCode: result.tracking ?? undefined,
+      labelPath: result.labelPath ?? undefined,
       errorMessage: null,
     });
 
     repo.createEvent('shipment_created', {
-      shipmentId,
-      trackingCode,
+      shipmentId: result.melhorEnvioOrderId,
+      trackingCode: result.tracking,
+      serviceName: result.serviceName,
+      price: result.price,
+      labelPath: result.labelPath,
     }, order.id, invoiceId);
 
-    log.info({ shipmentId, trackingCode }, 'Shipment criado, enfileirando geração de etiqueta');
+    // Se não conseguiu gerar etiqueta, enfileirar para tentar depois
+    if (!result.labelPath && result.melhorEnvioOrderId) {
+      log.info('Etiqueta não disponível ainda, enfileirando geração');
+      enqueueGenerateLabel(invoiceId, result.melhorEnvioOrderId);
+    }
 
-    // Enfileirar geração de etiqueta
-    enqueueGenerateLabel(invoiceId, shipmentId);
+    // Enviar código de rastreio via WhatsApp (se configurado)
+    if (result.tracking) {
+      const updatedOrder = repo.findOrderByInvoiceId(invoiceId);
+      if (updatedOrder) {
+        const whatsappSent = await unnichat.enviarCodigoRastreio(updatedOrder);
+        if (whatsappSent) {
+          repo.createEvent('whatsapp_tracking_sent', { tracking: result.tracking }, order.id, invoiceId);
+        }
+      }
+    }
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    // Verificar se é erro permanente
-    if (error instanceof loggi.LoggiApiError && error.isPermanent()) {
-      log.error({ error: message }, 'Erro permanente ao criar shipment');
+    // Verificar se é erro permanente (4xx exceto 429)
+    if (error instanceof melhorEnvio.MelhorEnvioError && !error.isTransient()) {
+      log.error({ error: message }, 'Erro permanente ao criar envio');
       repo.updateOrderStatus(invoiceId, 'FALHA', {
         errorMessage: message,
       });
@@ -108,7 +128,7 @@ async function handleCreateShipment(payload: CreateShipmentPayload): Promise<voi
 }
 
 /**
- * Handler: Gerar etiqueta
+ * Handler: Gerar etiqueta via Melhor Envio
  */
 async function handleGenerateLabel(payload: GenerateLabelPayload): Promise<void> {
   const { invoiceId, shipmentId } = payload;
@@ -129,24 +149,50 @@ async function handleGenerateLabel(payload: GenerateLabelPayload): Promise<void>
   }
 
   try {
-    // Gerar etiqueta
-    const labelPath = await loggi.generateLabel(shipmentId, invoiceId);
+    // Primeiro, gerar a etiqueta no Melhor Envio
+    await melhorEnvio.gerarEtiqueta(shipmentId);
+
+    // Depois, baixar o PDF
+    const labelPath = await melhorEnvio.imprimirEtiqueta(shipmentId, invoiceId);
+
+    // Tentar obter tracking se não temos
+    let tracking = order.loggi_tracking_code;
+    if (!tracking) {
+      try {
+        const info = await melhorEnvio.consultarEnvio(shipmentId);
+        tracking = info.tracking || null;
+      } catch {
+        log.warn('Tracking ainda não disponível');
+      }
+    }
 
     // Atualizar pedido
     repo.updateOrderStatus(invoiceId, 'ETIQUETA_GERADA', {
       labelPath,
+      loggiTrackingCode: tracking ?? undefined,
       errorMessage: null,
     });
 
-    repo.createEvent('label_generated', { labelPath }, order.id, invoiceId);
+    repo.createEvent('label_generated', { labelPath, tracking }, order.id, invoiceId);
 
-    log.info({ labelPath }, 'Etiqueta gerada com sucesso');
+    log.info({ labelPath, tracking }, 'Etiqueta gerada com sucesso');
+
+    // Enviar código de rastreio via WhatsApp (se configurado e tiver tracking)
+    if (tracking) {
+      const updatedOrder = repo.findOrderByInvoiceId(invoiceId);
+      if (updatedOrder) {
+        const whatsappSent = await unnichat.enviarCodigoRastreio(updatedOrder);
+        if (whatsappSent) {
+          repo.createEvent('whatsapp_tracking_sent', { tracking }, order.id, invoiceId);
+        }
+      }
+    }
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
     // Verificar se é erro permanente
-    if (error instanceof loggi.LoggiApiError && error.isPermanent()) {
+    if (error instanceof melhorEnvio.MelhorEnvioError && !error.isTransient()) {
       log.error({ error: message }, 'Erro permanente ao gerar etiqueta');
       repo.updateOrderStatus(invoiceId, 'FALHA', {
         errorMessage: `Erro ao gerar etiqueta: ${message}`,
@@ -162,13 +208,13 @@ async function handleGenerateLabel(payload: GenerateLabelPayload): Promise<void>
 }
 
 /**
- * Handler: Verificar status do shipment
+ * Handler: Verificar status do envio via Melhor Envio
  */
 async function handleCheckShipmentStatus(payload: CheckShipmentStatusPayload): Promise<void> {
   const { invoiceId, shipmentId } = payload;
   const log = createOrderLogger(invoiceId);
 
-  log.info({ shipmentId }, 'Verificando status do shipment');
+  log.info({ shipmentId }, 'Verificando status do envio');
 
   // Buscar pedido
   const order = repo.findOrderByInvoiceId(invoiceId);
@@ -177,21 +223,21 @@ async function handleCheckShipmentStatus(payload: CheckShipmentStatusPayload): P
   }
 
   try {
-    const status = await loggi.getShipmentStatus(shipmentId);
+    const info = await melhorEnvio.consultarEnvio(shipmentId);
 
     repo.createEvent('shipment_status_checked', {
-      status: status.status,
-      trackingCode: status.trackingCode,
+      status: info.status,
+      trackingCode: info.tracking,
     }, order.id, invoiceId);
 
     // Atualizar tracking code se disponível
-    if (status.trackingCode && !order.loggi_tracking_code) {
+    if (info.tracking && !order.loggi_tracking_code) {
       repo.updateOrderStatus(invoiceId, order.status, {
-        loggiTrackingCode: status.trackingCode,
+        loggiTrackingCode: info.tracking,
       });
     }
 
-    log.info({ status: status.status }, 'Status verificado');
+    log.info({ status: info.status, tracking: info.tracking }, 'Status verificado');
 
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
