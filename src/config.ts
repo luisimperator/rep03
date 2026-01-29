@@ -44,7 +44,7 @@ export function loadConfig(): Config {
   const port = getEnvNumber('PORT', getEnvNumber('APP_PORT', 3000));
 
   // Provider de envio: 'loggi' ou 'melhorenvio'
-  const shippingProvider = getEnv('SHIPPING_PROVIDER', 'loggi') as 'loggi' | 'melhorenvio';
+  const shippingProvider = getEnv('SHIPPING_PROVIDER', 'melhorenvio') as 'loggi' | 'melhorenvio';
 
   return {
     port,
