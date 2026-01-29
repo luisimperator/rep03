@@ -47,12 +47,19 @@ export function loadConfig(): Config {
     port,
 
     eduzz: {
-      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'chave_secreta_eduzz_canal_anfitriao'),
+      webhookSecret: getEnv('EDUZZ_WEBHOOK_SECRET', 'edzwgp_w8Zxg06nroieQMJzJeYQOi59KCDAcSpuGKXDbraHYJEZfNL0g'),
       // IDs dos produtos de adesivos do Canal do Anfitrião
       allowedProductIds: parseCSV(getEnv('EDUZZ_ALLOWED_PRODUCT_IDS',
         '1461811,1521176,1521233,1521243,1521415,2320335,2320422,2320426,2320427,2897710'
       )),
       allowedSkus: parseCSV(getEnv('EDUZZ_ALLOWED_SKUS', '')),
+    },
+
+    loggi: {
+      baseUrl: getEnv('LOGGI_BASE_URL', 'https://api.loggi.com'),
+      clientId: getEnv('LOGGI_CLIENT_ID', ''),
+      clientSecret: getEnv('LOGGI_CLIENT_SECRET', ''),
+      companyId: getEnv('LOGGI_COMPANY_ID', ''),
     },
 
     melhorEnvio: {

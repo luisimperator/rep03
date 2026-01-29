@@ -251,6 +251,16 @@ export interface Config {
     clientSecret: string;
     companyId: string;
   };
+  melhorEnvio: {
+    clientId: string;
+    token: string;
+    sandbox: boolean;
+  };
+  unnichat: {
+    apiUrl: string;
+    token: string;
+    enabled: boolean;
+  };
   origin: {
     name: string;
     phone: string;
@@ -262,6 +272,9 @@ export interface Config {
     city: string;
     state: string;
     zip: string;
+    document: string;
+    companyDocument: string;
+    stateRegister: string;
   };
   package: {
     weightG: number;

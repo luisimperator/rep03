@@ -10,6 +10,15 @@ import type { EduzzWebhookPayload } from '../types.js';
  */
 export async function eduzzWebhookRoutes(fastify: FastifyInstance): Promise<void> {
   /**
+   * GET /webhooks/eduzz
+   * Endpoint de verificação da Eduzz (retorna 200 OK)
+   */
+  fastify.get('/webhooks/eduzz', async (request: FastifyRequest, reply: FastifyReply) => {
+    logger.info('Verificação de URL do webhook Eduzz (GET)');
+    return reply.status(200).send({ status: 'ok', message: 'Webhook endpoint ready' });
+  });
+
+  /**
    * POST /webhooks/eduzz
    * Recebe webhooks da Eduzz
    */
@@ -23,7 +32,13 @@ export async function eduzzWebhookRoutes(fastify: FastifyInstance): Promise<void
     const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody || '';
     const payload = request.body as EduzzWebhookPayload;
 
-    logger.info({ event: payload?.event }, 'Webhook Eduzz recebido');
+    logger.info({ event: payload?.event, hasSignature: !!signature }, 'Webhook Eduzz recebido');
+
+    // Se não tem evento ou é um teste, aceitar sem validar
+    if (!payload?.event || payload.event === 'test' || payload.event === 'ping') {
+      logger.info('Requisição de teste/verificação da Eduzz');
+      return reply.status(200).send({ status: 'ok', message: 'Test received' });
+    }
 
     // Validar payload
     const validation = validateWebhookPayload(rawBody, signature, payload);
@@ -37,12 +52,8 @@ export async function eduzzWebhookRoutes(fastify: FastifyInstance): Promise<void
         reason: validation.reason,
       });
 
-      // Retornar 200 para não travar fila da Eduzz
-      // (exceto para assinatura inválida, que pode ser ataque)
-      if (validation.reason === 'invalid_signature') {
-        return reply.status(401).send({ error: 'Invalid signature' });
-      }
-
+      // Sempre retornar 200 para não travar fila da Eduzz
+      // A validação de assinatura protege contra processamento indevido
       return reply.status(200).send({ status: 'ignored', reason: validation.reason });
     }
 
