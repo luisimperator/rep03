@@ -122,7 +122,7 @@ export async function enviarCodigoRastreio(order: Order): Promise<boolean> {
   const message = montarMensagemRastreio(order);
 
   try {
-    await unnichatRequest('/messages/send', {
+    await unnichatRequest('/meta/messages', {
       method: 'POST',
       body: JSON.stringify({
         to: phone,
@@ -186,7 +186,7 @@ export async function enviarMensagem(
   }
 
   try {
-    await unnichatRequest('/messages/send', {
+    await unnichatRequest('/meta/messages', {
       method: 'POST',
       body: JSON.stringify({
         to: formattedPhone,
