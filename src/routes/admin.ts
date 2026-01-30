@@ -5,6 +5,7 @@ import { logger, createOrderLogger } from '../utils/logger.js';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import type { Order, OrderItem, Event, OrderStatus } from '../types.js';
+import * as unnichat from '../services/unnichat.js';
 
 /**
  * Gera HTML do painel admin
@@ -519,5 +520,148 @@ export async function adminRoutes(fastify: FastifyInstance): Promise<void> {
     const events = repo.getEventsByOrderId(order.id, 50);
 
     return reply.send({ order, items, events });
+  });
+
+  /**
+   * POST /admin/test-whatsapp
+   * Testa envio de mensagem WhatsApp via Unnichat
+   */
+  fastify.post('/admin/test-whatsapp', async (
+    request: FastifyRequest<{ Body: { phone: string; message?: string } }>,
+    reply: FastifyReply
+  ) => {
+    const { phone, message } = request.body || {};
+
+    if (!phone) {
+      return reply.status(400).send({ error: 'Phone é obrigatório' });
+    }
+
+    const testMessage = message || `🧪 Teste de WhatsApp!\n\nSe você recebeu esta mensagem, a integração com Unnichat está funcionando.\n\nData/Hora: ${new Date().toLocaleString('pt-BR')}`;
+
+    logger.info({ phone }, 'Testando envio de WhatsApp');
+
+    try {
+      const success = await unnichat.enviarMensagem(phone, testMessage);
+
+      if (success) {
+        return reply.send({
+          status: 'ok',
+          message: 'Mensagem enviada com sucesso!',
+          phone
+        });
+      } else {
+        return reply.status(500).send({
+          status: 'error',
+          message: 'Falha ao enviar mensagem. Verifique se o Unnichat está habilitado e configurado corretamente.',
+          phone
+        });
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error({ error: errorMessage, phone }, 'Erro ao testar WhatsApp');
+      return reply.status(500).send({
+        status: 'error',
+        message: errorMessage,
+        phone
+      });
+    }
+  });
+
+  /**
+   * GET /admin/test-whatsapp
+   * Página de teste de WhatsApp
+   */
+  fastify.get('/admin/test-whatsapp', async (request: FastifyRequest, reply: FastifyReply) => {
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teste WhatsApp | Eduzz → Loggi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <nav class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+      <h1 class="text-xl font-bold text-gray-800">Teste WhatsApp</h1>
+      <a href="/admin" class="text-blue-600 hover:underline">← Voltar</a>
+    </div>
+  </nav>
+
+  <main class="max-w-lg mx-auto px-4 py-8">
+    <div class="bg-white rounded-lg shadow p-6">
+      <form id="testForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Telefone (com DDD)</label>
+          <input type="text" id="phone" name="phone" placeholder="11999998888"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            required>
+          <p class="text-xs text-gray-500 mt-1">Formato: apenas números, com DDD (ex: 11999998888)</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Mensagem (opcional)</label>
+          <textarea id="message" name="message" rows="3" placeholder="Deixe vazio para mensagem padrão de teste"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+        <button type="submit" id="submitBtn"
+          class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 font-medium">
+          📱 Enviar WhatsApp de Teste
+        </button>
+      </form>
+
+      <div id="result" class="mt-4 hidden">
+        <div id="resultContent" class="p-4 rounded-md"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    document.getElementById('testForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const btn = document.getElementById('submitBtn');
+      const result = document.getElementById('result');
+      const resultContent = document.getElementById('resultContent');
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Enviando...';
+      result.classList.add('hidden');
+
+      try {
+        const response = await fetch('/admin/test-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            phone: document.getElementById('phone').value,
+            message: document.getElementById('message').value || undefined
+          })
+        });
+
+        const data = await response.json();
+
+        result.classList.remove('hidden');
+        if (response.ok) {
+          resultContent.className = 'p-4 rounded-md bg-green-100 text-green-800';
+          resultContent.innerHTML = '✅ ' + data.message;
+        } else {
+          resultContent.className = 'p-4 rounded-md bg-red-100 text-red-800';
+          resultContent.innerHTML = '❌ ' + data.message;
+        }
+      } catch (error) {
+        result.classList.remove('hidden');
+        resultContent.className = 'p-4 rounded-md bg-red-100 text-red-800';
+        resultContent.innerHTML = '❌ Erro: ' + error.message;
+      }
+
+      btn.disabled = false;
+      btn.textContent = '📱 Enviar WhatsApp de Teste';
+    });
+  </script>
+</body>
+</html>
+    `;
+
+    return reply.type('text/html').send(html);
   });
 }
